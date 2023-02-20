@@ -8,12 +8,69 @@ Author's name and StudentID:
  Student ID: 301274473
 3. Muhammad Bilal Dilbar Hussain
  Student ID: 301205152
-App description: This is third part of App. In this part, using SiwftUI we have include additional Screens to our Slot Machine Appthat will display information about how to play your slot machine game and how much winning combinations will pay out. We used Core Data for Data persistence.
+App description: This is third part of App. In this part, using SiwftUI we have include additional Screens to our Slot Machine Appthat will display information about how to play your slot machine game and how much winning combinations will pay out. We used Core Data for Data persistence to store high scores.
 Last Updated 19 Febraury, 2023
 Xcode Version : Version 14.2 (14C18)
  */
 
 import SwiftUI
+import CoreData
+
+class CoreDataViewModel: ObservableObject
+{
+    static let shareed = CoreDataViewModel()
+    
+    let container: NSPersistentContainer
+    @Published var savedEntities: [HighScoreEntity] = []
+    
+    init()
+    {
+        container = NSPersistentContainer(name: "SlotMachineApp")
+        container.loadPersistentStores{(description, error) in
+            if let error = error{
+                print("Error Loading Core Data. \(error)")
+            }
+            else {
+                print("Successfully loaded core data")
+            }
+        }
+        fetchHighScore()
+    }
+    
+    func fetchHighScore()
+    {
+        let request = NSFetchRequest<HighScoreEntity>(entityName: "HighScoreEntity")
+        
+        do
+        {
+            savedEntities = try container.viewContext.fetch(request)
+        }
+        catch let error {
+            print("Error Fetchine. \(error)")
+        }
+    }
+    
+    func addHighScore(date: String, score: Int)
+    {
+        let newScore = HighScoreEntity(context: container.viewContext)
+        newScore.date = date
+        newScore.wonMoney = Int64(score)
+        saveData()
+    }
+    
+    func saveData()
+    {
+        do
+        {
+            try container.viewContext.save()
+            fetchHighScore()
+        }
+        catch let error {
+            print("Error Saving. \(error)")
+        }
+        
+    }
+}
 
 struct ButtonModifier: ViewModifier
 {
@@ -29,6 +86,9 @@ struct ButtonModifier: ViewModifier
 
 struct ContentView: View
 {
+    static let shared = ContentView()
+    @StateObject var vm = CoreDataViewModel()
+    
     @State private var money = 1000
     @State private var betAmount = 0
     @State private var wonMoney = 0
@@ -40,6 +100,7 @@ struct ContentView: View
     @State private var animatingSymbol: Bool = false
     @State private var animatingModal: Bool = false
     @State private var showSupportView: Bool = false
+    @State private var showHighScoreView: Bool = false
     @State private var gameOverModal: Bool = false
     @State private var gameWinModal: Bool = false
     @State private var spinDegrees: Double = 0
@@ -113,7 +174,7 @@ struct ContentView: View
         self.wonMoney = 0
         self.blurRadius = 2
         self.winMessage = "Choose a bet"
-        soundPlaying(sound: "chimeup", type: "mp3")
+        
     }
     
     func quitGame()
@@ -292,6 +353,7 @@ struct ContentView: View
                 {
                     Button
                     {
+                        soundPlaying(sound: "chimeup", type: "mp3")
                         resetGame()
                     }
                     label:
@@ -377,10 +439,24 @@ struct ContentView: View
                 }
                     .modifier(ButtonModifier()), alignment: .topTrailing)
                 .frame(maxWidth: 720)
+                .overlay(
+                    Button(action:
+                    {
+                        self.showHighScoreView = true
+                        soundPlaying(sound: "high-score", type: "mp3")
+                    })
+                    {
+                        Image("high-score").resizable()
+                            .aspectRatio(1, contentMode: .fit)
+                            .frame(width: 45)
+                    }
+                        .padding(25).modifier(ButtonModifier()), alignment: .topLeading)
+                .frame(maxWidth: 200)
                 .blur(radius: $gameOverModal.wrappedValue ? 5 : 0, opaque: false)
             
             if $gameWinModal.wrappedValue
             {
+                
                 ZStack
                 {
                     Color("ColorTransparentBlack")
@@ -429,9 +505,19 @@ struct ContentView: View
                             }
                             Button(action:
                                 {
+                                
+                                // Date
+                                let now = Date.now
+                                let dateFormatter = DateFormatter()
+                                dateFormatter.dateFormat = "dd MMM yyyy hh:mm"
+                                let selectedDate = dateFormatter.string(from: now)
+                                let dateValue = selectedDate
+                                soundPlaying(sound: "high-score", type: "mp3")
                                 self.gameWinModal = false
                                 self.animatingModal = false
-//                                resetGame()
+                                self.showHighScoreView = true
+                                vm.addHighScore(date: dateValue, score: self.wonMoney)
+                                resetGame()
                             })
                             {
                                 Text("Payout".uppercased())
@@ -532,6 +618,10 @@ struct ContentView: View
         .sheet(isPresented: $showSupportView)
         {
             SupportView()
+        }
+        .sheet(isPresented: $showHighScoreView)
+        {
+            HighScoreView()
         }
     }
 }
